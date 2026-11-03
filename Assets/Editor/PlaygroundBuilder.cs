@@ -12,6 +12,7 @@ public static class PlaygroundBuilder
     private static Material matGrassTurf;
     private static Material matOuterGrass;
     private static Material matTrack;
+    private static Material matGoalApron;
     private static Material matWhiteLine;
     private static Material matGoalPost;
     private static Material matGoalNet;
@@ -50,6 +51,7 @@ public static class PlaygroundBuilder
         BuildGroundAndOuterApron(rootEnv);
         BuildSoccerPitch(rootEnv);
         BuildAthleticsTrack(rootEnv);
+        BuildFieldAirWalls(rootEnv);
         BuildSoccerGoals(rootEnv);
         BuildSoccerBalls(rootEnv);
         BuildGrandstands(rootEnv);
@@ -179,6 +181,21 @@ public static class PlaygroundBuilder
         matTrack.SetColor("_BaseColor", new Color(0.85f, 0.28f, 0.22f));
         matTrack.SetFloat("_Smoothness", 0.3f);
         AssetDatabase.CreateAsset(matTrack, "Assets/Materials/Mat_Track.mat");
+
+        // Blue polyurethane safety apron behind each goal, using the same PU
+        // texture as the track while remaining visually distinct from it.
+        matGoalApron = new Material(urpLit);
+        matGoalApron.name = "Mat_GoalApron_BluePU";
+        if (trackTex != null)
+        {
+            matGoalApron.SetTexture("_BaseMap", trackTex);
+            matGoalApron.SetTextureScale("_BaseMap", new Vector2(10, 10));
+        }
+        matGoalApron.SetColor("_BaseColor", new Color(0.03f, 0.62f, 1.0f));
+        matGoalApron.SetColor("_EmissionColor", new Color(0.005f, 0.10f, 0.28f));
+        matGoalApron.EnableKeyword("_EMISSION");
+        matGoalApron.SetFloat("_Smoothness", 0.3f);
+        AssetDatabase.CreateAsset(matGoalApron, "Assets/Materials/Mat_GoalApron_BluePU.mat");
 
         // White Line
         matWhiteLine = new Material(urpLit);
@@ -538,23 +555,24 @@ public static class PlaygroundBuilder
         grassCenter.name = "Turf_CenterRectangle";
         grassCenter.transform.parent = pitchGroup.transform;
         grassCenter.transform.position = new Vector3(0, 0f, 0);
-        grassCenter.transform.localScale = new Vector3(6.4f, 1f, 10f); // Plane standard size is 10x10, so 6.4x10 = 64m x 100m
+        grassCenter.transform.localScale = new Vector3(6.4f, 1f, 10f); // Extends behind the relocated goals so their frames and nets stand on grass.
         grassCenter.GetComponent<MeshRenderer>().sharedMaterial = matGrassTurf;
 
-        // 2. North & South Grass Semicircles inside track turns
-        BuildSemicircleMesh("Turf_NorthSemicircle", pitchGroup.transform, new Vector3(0, 0, 50), 32.0f, matGrassTurf, 0f, 180f);
-        BuildSemicircleMesh("Turf_SouthSemicircle", pitchGroup.transform, new Vector3(0, 0, -50), 32.0f, matGrassTurf, 180f, 360f);
+        // 2. Blue PU safety aprons between each goal line and the track's inner edge.
+        BuildSemicircleMesh("Turf_NorthSemicircle", pitchGroup.transform, new Vector3(0, 0, 50), 32.0f, matGoalApron, 0f, 180f);
+        BuildSemicircleMesh("Turf_SouthSemicircle", pitchGroup.transform, new Vector3(0, 0, -50), 32.0f, matGoalApron, 180f, 360f);
 
         // 3. Official Pitch Lines (White Strip Meshes at Y = 0.005)
         float lineWidth = 0.12f;
+        const float goalLineZ = 50f;
 
         // Touchlines (Sides)
         CreateLineStrip(pitchGroup.transform, "Line_Touchline_East", new Vector3(32, 0.005f, 0), new Vector3(lineWidth, 0.001f, 100f));
         CreateLineStrip(pitchGroup.transform, "Line_Touchline_West", new Vector3(-32, 0.005f, 0), new Vector3(lineWidth, 0.001f, 100f));
 
         // Goal lines (Ends)
-        CreateLineStrip(pitchGroup.transform, "Line_GoalLine_North", new Vector3(0, 0.005f, 50), new Vector3(64f, 0.001f, lineWidth));
-        CreateLineStrip(pitchGroup.transform, "Line_GoalLine_South", new Vector3(0, 0.005f, -50), new Vector3(64f, 0.001f, lineWidth));
+        CreateLineStrip(pitchGroup.transform, "Line_GoalLine_North", new Vector3(0, 0.005f, goalLineZ), new Vector3(64f, 0.001f, lineWidth));
+        CreateLineStrip(pitchGroup.transform, "Line_GoalLine_South", new Vector3(0, 0.005f, -goalLineZ), new Vector3(64f, 0.001f, lineWidth));
 
         // Halfway line
         CreateLineStrip(pitchGroup.transform, "Line_Halfway", new Vector3(0, 0.005f, 0), new Vector3(64f, 0.001f, lineWidth));
@@ -571,17 +589,16 @@ public static class PlaygroundBuilder
         Object.DestroyImmediate(centerSpot.GetComponent<Collider>());
         centerSpot.GetComponent<MeshRenderer>().sharedMaterial = matWhiteLine;
 
-        // North Penalty Area (40.3m x 16.5m -> Z: 33.5 to 50, X: -20.15 to +20.15)
+        // North penalty area remains aligned with the end line at Z = 50.
         CreateLineStrip(pitchGroup.transform, "Line_PenArea_N_Front", new Vector3(0, 0.005f, 33.5f), new Vector3(40.3f, 0.001f, lineWidth));
         CreateLineStrip(pitchGroup.transform, "Line_PenArea_N_Left", new Vector3(-20.15f, 0.005f, 41.75f), new Vector3(lineWidth, 0.001f, 16.5f));
         CreateLineStrip(pitchGroup.transform, "Line_PenArea_N_Right", new Vector3(20.15f, 0.005f, 41.75f), new Vector3(lineWidth, 0.001f, 16.5f));
 
-        // North Goal Area (18.3m x 5.5m -> Z: 44.5 to 50, X: -9.15 to +9.15)
         CreateLineStrip(pitchGroup.transform, "Line_GoalArea_N_Front", new Vector3(0, 0.005f, 44.5f), new Vector3(18.3f, 0.001f, lineWidth));
         CreateLineStrip(pitchGroup.transform, "Line_GoalArea_N_Left", new Vector3(-9.15f, 0.005f, 47.25f), new Vector3(lineWidth, 0.001f, 5.5f));
         CreateLineStrip(pitchGroup.transform, "Line_GoalArea_N_Right", new Vector3(9.15f, 0.005f, 47.25f), new Vector3(lineWidth, 0.001f, 5.5f));
 
-        // North Penalty Spot (0, 0.006, 39)
+        // North Penalty Spot
         GameObject penSpotN = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         penSpotN.name = "Spot_Penalty_North";
         penSpotN.transform.parent = pitchGroup.transform;
@@ -616,10 +633,10 @@ public static class PlaygroundBuilder
         BuildRingLineMesh("Line_PenArc_South", pitchGroup.transform, new Vector3(0, 0.005f, -39f), 9.15f, lineWidth, 24, 35f, 145f);
 
         // Corner Arcs (1m radius at all four corners)
-        BuildRingLineMesh("CornerArc_NE", pitchGroup.transform, new Vector3(32, 0.005f, 50), 1.0f, lineWidth, 12, 180f, 270f);
-        BuildRingLineMesh("CornerArc_NW", pitchGroup.transform, new Vector3(-32, 0.005f, 50), 1.0f, lineWidth, 12, 270f, 360f);
-        BuildRingLineMesh("CornerArc_SE", pitchGroup.transform, new Vector3(32, 0.005f, -50), 1.0f, lineWidth, 12, 90f, 180f);
-        BuildRingLineMesh("CornerArc_SW", pitchGroup.transform, new Vector3(-32, 0.005f, -50), 1.0f, lineWidth, 12, 0f, 90f);
+        BuildRingLineMesh("CornerArc_NE", pitchGroup.transform, new Vector3(32, 0.005f, goalLineZ), 1.0f, lineWidth, 12, 180f, 270f);
+        BuildRingLineMesh("CornerArc_NW", pitchGroup.transform, new Vector3(-32, 0.005f, goalLineZ), 1.0f, lineWidth, 12, 270f, 360f);
+        BuildRingLineMesh("CornerArc_SE", pitchGroup.transform, new Vector3(32, 0.005f, -goalLineZ), 1.0f, lineWidth, 12, 90f, 180f);
+        BuildRingLineMesh("CornerArc_SW", pitchGroup.transform, new Vector3(-32, 0.005f, -goalLineZ), 1.0f, lineWidth, 12, 0f, 90f);
     }
 
     private static void BuildAthleticsTrack(GameObject parent)
@@ -694,13 +711,74 @@ public static class PlaygroundBuilder
         }
     }
 
+    /// <summary>
+    /// Creates an invisible field boundary. Each goal mouth is recessed into a
+    /// U-shaped pocket so players and balls can enter the goal, but neither can
+    /// travel from the net area onto the running track.
+    /// </summary>
+    private static void BuildFieldAirWalls(GameObject parent)
+    {
+        GameObject wallGroup = new GameObject("FieldAirWalls_Invisible");
+        wallGroup.transform.parent = parent.transform;
+
+        const float wallThickness = 0.6f;
+        const float wallHeight = 6.5f;
+        const float fieldHalfWidth = 32f;
+        const float fieldHalfLength = 50f;
+
+        CreateInvisibleWall(wallGroup.transform, "AirWall_EastTouchline", new Vector3(fieldHalfWidth, 0f, 0f),
+            Vector3.zero, new Vector3(wallThickness, wallHeight, fieldHalfLength * 2f));
+        CreateInvisibleWall(wallGroup.transform, "AirWall_WestTouchline", new Vector3(-fieldHalfWidth, 0f, 0f),
+            Vector3.zero, new Vector3(wallThickness, wallHeight, fieldHalfLength * 2f));
+
+        CreateGoalRecess(wallGroup.transform, "North", fieldHalfLength, wallThickness, wallHeight);
+        CreateGoalRecess(wallGroup.transform, "South", -fieldHalfLength, wallThickness, wallHeight);
+    }
+
+    private static void CreateGoalRecess(Transform parent, string endName, float goalLineZ, float thickness, float height)
+    {
+        const float fieldHalfWidth = 32f;
+        const float pocketHalfWidth = 4.2f;
+        const float pocketDepth = 2.7f;
+        float direction = Mathf.Sign(goalLineZ);
+        float sideLength = fieldHalfWidth - pocketHalfWidth;
+
+        // End-line walls stop at the outside of the goal mouth.
+        CreateInvisibleWall(parent, $"AirWall_{endName}_EndLeft", new Vector3(-(fieldHalfWidth + pocketHalfWidth) * 0.5f, 0f, goalLineZ),
+            Vector3.zero, new Vector3(sideLength, height, thickness));
+        CreateInvisibleWall(parent, $"AirWall_{endName}_EndRight", new Vector3((fieldHalfWidth + pocketHalfWidth) * 0.5f, 0f, goalLineZ),
+            Vector3.zero, new Vector3(sideLength, height, thickness));
+
+        // These three walls form the recessed U behind the goal rather than
+        // placing a straight wall across the goal line.
+        float backZ = goalLineZ + direction * pocketDepth;
+        CreateInvisibleWall(parent, $"AirWall_{endName}_GoalPocketLeft", new Vector3(-pocketHalfWidth, 0f, (goalLineZ + backZ) * 0.5f),
+            Vector3.zero, new Vector3(thickness, height, pocketDepth));
+        CreateInvisibleWall(parent, $"AirWall_{endName}_GoalPocketRight", new Vector3(pocketHalfWidth, 0f, (goalLineZ + backZ) * 0.5f),
+            Vector3.zero, new Vector3(thickness, height, pocketDepth));
+        CreateInvisibleWall(parent, $"AirWall_{endName}_GoalPocketBack", new Vector3(0f, 0f, backZ),
+            Vector3.zero, new Vector3(pocketHalfWidth * 2f, height, thickness));
+    }
+
+    private static void CreateInvisibleWall(Transform parent, string name, Vector3 position, Vector3 eulerAngles, Vector3 size)
+    {
+        GameObject wall = new GameObject(name);
+        wall.transform.parent = parent;
+        wall.transform.position = position;
+        wall.transform.rotation = Quaternion.Euler(eulerAngles);
+
+        BoxCollider collider = wall.AddComponent<BoxCollider>();
+        collider.center = new Vector3(0f, size.y * 0.5f, 0f);
+        collider.size = size;
+    }
+
     private static void BuildSoccerGoals(GameObject parent)
     {
         GameObject goalsGroup = new GameObject("SoccerGoals");
         goalsGroup.transform.parent = parent.transform;
 
-        BuildSingleGoal(goalsGroup.transform, "SoccerGoal_North", new Vector3(0, 0, 50), 180f);
-        BuildSingleGoal(goalsGroup.transform, "SoccerGoal_South", new Vector3(0, 0, -50), 0f);
+        BuildSingleGoal(goalsGroup.transform, "SoccerGoal_North", new Vector3(0, 0, 47.5f), 180f);
+        BuildSingleGoal(goalsGroup.transform, "SoccerGoal_South", new Vector3(0, 0, -47.5f), 0f);
     }
 
     private static void BuildSingleGoal(Transform parent, string name, Vector3 pos, float rotY)
@@ -749,6 +827,7 @@ public static class PlaygroundBuilder
         netBack.transform.localPosition = new Vector3(0, goalHeight * 0.5f, -goalDepth * 0.5f);
         netBack.transform.localRotation = Quaternion.Euler(slantAngle - 90f, 0, 0);
         netBack.transform.localScale = new Vector3(goalWidth, slantLength, 1f);
+        Object.DestroyImmediate(netBack.GetComponent<Collider>());
         netBack.GetComponent<MeshRenderer>().sharedMaterial = matGoalNet;
 
         // Left Net
@@ -758,6 +837,7 @@ public static class PlaygroundBuilder
         netLeft.transform.localPosition = new Vector3(-goalWidth * 0.5f, goalHeight * 0.5f, -goalDepth * 0.5f);
         netLeft.transform.localRotation = Quaternion.Euler(0, 90f, 0);
         netLeft.transform.localScale = new Vector3(goalDepth, goalHeight, 1f);
+        Object.DestroyImmediate(netLeft.GetComponent<Collider>());
         netLeft.GetComponent<MeshRenderer>().sharedMaterial = matGoalNet;
 
         // Right Net
@@ -767,6 +847,7 @@ public static class PlaygroundBuilder
         netRight.transform.localPosition = new Vector3(goalWidth * 0.5f, goalHeight * 0.5f, -goalDepth * 0.5f);
         netRight.transform.localRotation = Quaternion.Euler(0, -90f, 0);
         netRight.transform.localScale = new Vector3(goalDepth, goalHeight, 1f);
+        Object.DestroyImmediate(netRight.GetComponent<Collider>());
         netRight.GetComponent<MeshRenderer>().sharedMaterial = matGoalNet;
 
         // Goal Trigger Volume
