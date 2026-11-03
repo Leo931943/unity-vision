@@ -30,8 +30,8 @@ public static class FieldAirWalls
             new Vector3(Thickness, Height, 100f));
         CreateWall(group.transform, "AirWall_WestTouchline", new Vector3(-32f, 0f, 0f), 0f,
             new Vector3(Thickness, Height, 100f));
-        CreateGoalRecess(group.transform, "North", 50f);
-        CreateGoalRecess(group.transform, "South", -50f);
+        CreateGoalBackWall(group.transform, "North", 50f);
+        CreateGoalBackWall(group.transform, "South", -50f);
     }
 
     private static void AlignGoalsAndPitchMarkings()
@@ -103,26 +103,10 @@ public static class FieldAirWalls
         }
     }
 
-    private static void CreateGoalRecess(Transform parent, string endName, float goalLineZ)
+    private static void CreateGoalBackWall(Transform parent, string endName, float zPosition)
     {
-        const float fieldHalfWidth = 32f;
-        const float pocketHalfWidth = 4.2f;
-        const float pocketDepth = 2.7f;
-        float direction = Mathf.Sign(goalLineZ);
-        float sideLength = fieldHalfWidth - pocketHalfWidth;
-
-        CreateWall(parent, $"AirWall_{endName}_EndLeft", new Vector3(-(fieldHalfWidth + pocketHalfWidth) * 0.5f, 0f, goalLineZ), 0f,
-            new Vector3(sideLength, Height, Thickness));
-        CreateWall(parent, $"AirWall_{endName}_EndRight", new Vector3((fieldHalfWidth + pocketHalfWidth) * 0.5f, 0f, goalLineZ), 0f,
-            new Vector3(sideLength, Height, Thickness));
-
-        float backZ = goalLineZ + direction * pocketDepth;
-        CreateWall(parent, $"AirWall_{endName}_GoalPocketLeft", new Vector3(-pocketHalfWidth, 0f, (goalLineZ + backZ) * 0.5f), 0f,
-            new Vector3(Thickness, Height, pocketDepth));
-        CreateWall(parent, $"AirWall_{endName}_GoalPocketRight", new Vector3(pocketHalfWidth, 0f, (goalLineZ + backZ) * 0.5f), 0f,
-            new Vector3(Thickness, Height, pocketDepth));
-        CreateWall(parent, $"AirWall_{endName}_GoalPocketBack", new Vector3(0f, 0f, backZ), 0f,
-            new Vector3(pocketHalfWidth * 2f, Height, Thickness));
+        CreateWall(parent, $"AirWall_{endName}_GoalBack", new Vector3(0f, 0f, zPosition), 0f,
+            new Vector3(64f, Height, Thickness));
     }
 
     private static void CreateWall(Transform parent, string name, Vector3 position, float yRotation, Vector3 size)

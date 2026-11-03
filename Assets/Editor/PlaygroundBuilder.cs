@@ -712,9 +712,8 @@ public static class PlaygroundBuilder
     }
 
     /// <summary>
-    /// Creates an invisible field boundary. Each goal mouth is recessed into a
-    /// U-shaped pocket so players and balls can enter the goal, but neither can
-    /// travel from the net area onto the running track.
+    /// Creates an invisible rectangular field boundary. The end walls sit just
+    /// behind the goal nets, so players can enter a goal but cannot reach track.
     /// </summary>
     private static void BuildFieldAirWalls(GameObject parent)
     {
@@ -731,33 +730,14 @@ public static class PlaygroundBuilder
         CreateInvisibleWall(wallGroup.transform, "AirWall_WestTouchline", new Vector3(-fieldHalfWidth, 0f, 0f),
             Vector3.zero, new Vector3(wallThickness, wallHeight, fieldHalfLength * 2f));
 
-        CreateGoalRecess(wallGroup.transform, "North", fieldHalfLength, wallThickness, wallHeight);
-        CreateGoalRecess(wallGroup.transform, "South", -fieldHalfLength, wallThickness, wallHeight);
+        CreateGoalBackWall(wallGroup.transform, "North", fieldHalfLength, fieldHalfWidth, wallThickness, wallHeight);
+        CreateGoalBackWall(wallGroup.transform, "South", -fieldHalfLength, fieldHalfWidth, wallThickness, wallHeight);
     }
 
-    private static void CreateGoalRecess(Transform parent, string endName, float goalLineZ, float thickness, float height)
+    private static void CreateGoalBackWall(Transform parent, string endName, float zPosition, float halfWidth, float thickness, float height)
     {
-        const float fieldHalfWidth = 32f;
-        const float pocketHalfWidth = 4.2f;
-        const float pocketDepth = 2.7f;
-        float direction = Mathf.Sign(goalLineZ);
-        float sideLength = fieldHalfWidth - pocketHalfWidth;
-
-        // End-line walls stop at the outside of the goal mouth.
-        CreateInvisibleWall(parent, $"AirWall_{endName}_EndLeft", new Vector3(-(fieldHalfWidth + pocketHalfWidth) * 0.5f, 0f, goalLineZ),
-            Vector3.zero, new Vector3(sideLength, height, thickness));
-        CreateInvisibleWall(parent, $"AirWall_{endName}_EndRight", new Vector3((fieldHalfWidth + pocketHalfWidth) * 0.5f, 0f, goalLineZ),
-            Vector3.zero, new Vector3(sideLength, height, thickness));
-
-        // These three walls form the recessed U behind the goal rather than
-        // placing a straight wall across the goal line.
-        float backZ = goalLineZ + direction * pocketDepth;
-        CreateInvisibleWall(parent, $"AirWall_{endName}_GoalPocketLeft", new Vector3(-pocketHalfWidth, 0f, (goalLineZ + backZ) * 0.5f),
-            Vector3.zero, new Vector3(thickness, height, pocketDepth));
-        CreateInvisibleWall(parent, $"AirWall_{endName}_GoalPocketRight", new Vector3(pocketHalfWidth, 0f, (goalLineZ + backZ) * 0.5f),
-            Vector3.zero, new Vector3(thickness, height, pocketDepth));
-        CreateInvisibleWall(parent, $"AirWall_{endName}_GoalPocketBack", new Vector3(0f, 0f, backZ),
-            Vector3.zero, new Vector3(pocketHalfWidth * 2f, height, thickness));
+        CreateInvisibleWall(parent, $"AirWall_{endName}_GoalBack", new Vector3(0f, 0f, zPosition),
+            Vector3.zero, new Vector3(halfWidth * 2f, height, thickness));
     }
 
     private static void CreateInvisibleWall(Transform parent, string name, Vector3 position, Vector3 eulerAngles, Vector3 size)
