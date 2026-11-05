@@ -17,6 +17,7 @@ public class PlayerController : MonoBehaviour
     public float runSpeed = 9.0f;
     [Tooltip("Acceleration and deceleration smoothing")]
     public float speedSmoothTime = 0.1f;
+    [HideInInspector] public float possessionSpeedMultiplier = 1f;
     [Tooltip("Rotation turn smoothing")]
     public float turnSmoothSpeed = 15f;
 
@@ -38,6 +39,7 @@ public class PlayerController : MonoBehaviour
     [Min(0.1f)] public float ballControlRange = 1.35f;
     [Tooltip("Impulse used for an E-key power shot")]
     [Min(0f)] public float powerShotForce = 7.5f;
+    [Min(0f)] public float powerShotCooldown = 3f;
     [Header("Foot Ball Contact")]
     [Tooltip("Size of the invisible physical touch zone in front of the feet")]
     public Vector3 footTouchZoneSize = new Vector3(1.12f, 0.4f, 0.82f);
@@ -47,6 +49,12 @@ public class PlayerController : MonoBehaviour
     [Min(0f)] public float footTouchKickForce = 0.9f;
     [Tooltip("Minimum delay between repeated touches from the invisible foot zone")]
     [Min(0.01f)] public float footTouchCooldown = 0.055f;
+    [Header("Ball Challenges")]
+    [Tooltip("Extra reach while sprinting to challenge an AI-carried ball")]
+    [Min(0.1f)] public float challengeRange = 1.65f;
+    [Tooltip("Impulse that knocks the ball clear during a close challenge")]
+    [Min(0f)] public float challengeKickForce = 1.7f;
+    [Min(0.05f)] public float challengeCooldown = 0.18f;
     [Header("Power Shot Animation")]
     [Min(0.1f)] public float powerShotAnimationDuration = 0.58f;
 
@@ -64,7 +72,9 @@ public class PlayerController : MonoBehaviour
     private bool isJumping;
     private Rigidbody lastTouchedBall;
     private float lastBallTouchTime;
+    private float nextChallengeTime;
     private float powerShotAnimationTime = -1f;
+    private float nextPowerShotTime;
     private Transform rightUpperLeg;
     private Transform rightLowerLeg;
     private Transform rightFoot;
@@ -76,6 +86,7 @@ public class PlayerController : MonoBehaviour
     public float CurrentSpeed => currentSpeed;
     public bool IsGrounded => isGrounded;
     public bool IsSprinting { get; private set; }
+    public float PowerShotCooldownRemaining => Mathf.Max(0f, nextPowerShotTime - Time.time);
 
     void Awake()
     {
@@ -128,7 +139,7 @@ public class PlayerController : MonoBehaviour
         }
 
         IsSprinting = sprintInput && moveInput.sqrMagnitude > 0.05f;
-        float targetSpeed = (IsSprinting ? runSpeed : walkSpeed) * moveInput.magnitude;
+        float targetSpeed = (IsSprinting ? runSpeed : walkSpeed) * moveInput.magnitude * possessionSpeedMultiplier;
 
         // Grounded check
         isGrounded = controller.isGrounded;
@@ -177,6 +188,7 @@ public class PlayerController : MonoBehaviour
         // A CharacterController can otherwise cross a small ball between frames
         // at sprint speed without reporting a collision.
         SweepFootTouchZone(moveDir);
+        TryChallengeOpponentBall(moveDir);
 
         // Final motion
         Vector3 velocity = moveDir * currentSpeed + Vector3.up * verticalVelocity;
@@ -301,6 +313,25 @@ public class PlayerController : MonoBehaviour
         controller.enabled = true;
     }
 
+    public void SetMatchSpawn(Vector3 position, Vector3 facing)
+    {
+        controller.enabled = false;
+        transform.position = position;
+        transform.rotation = Quaternion.LookRotation(facing, Vector3.up);
+        verticalVelocity = 0f;
+        currentSpeed = 0f;
+        speedSmoothVelocity = 0f;
+        controller.enabled = true;
+    }
+
+    public void SetPossessionSlowdown(bool hasPossession)
+    {
+        // A meaningful pace gap is needed for the chasing player to catch a
+        // dribbler. Keep it modest enough that carrying the ball still feels
+        // responsive, but not so small that a straight run is unbeatable.
+        possessionSpeedMultiplier = hasPossession ? 0.86f : 1f;
+    }
+
     void OnControllerColliderHit(ControllerColliderHit hit)
     {
         // CharacterController contacts are reported every frame.  Applying a full
@@ -321,6 +352,7 @@ public class PlayerController : MonoBehaviour
         float impulse = Mathf.Lerp(0.45f, Mathf.Min(kickForce, 1.8f), speedFactor);
 
         rb.AddForce(pushDir * impulse, ForceMode.Impulse);
+        SoccerMatchManager.Instance?.RegisterBallTouch(true);
         if (rb.linearVelocity.magnitude > 12f)
         {
             rb.linearVelocity = rb.linearVelocity.normalized * 12f;
@@ -332,17 +364,20 @@ public class PlayerController : MonoBehaviour
 
     private void TryPowerShot(Vector3 moveDir)
     {
-        // A shot is also a player action when no ball is in range.
-        PlayPowerShotAnimation();
+        if (Time.time < nextPowerShotTime)
+            return;
 
         Vector3 shotDirection = moveDir.sqrMagnitude > 0.01f ? moveDir : transform.forward;
         Rigidbody ball = FindControllableBall(shotDirection, ballControlRange + 0.3f);
         if (ball == null)
             return;
 
+        PlayPowerShotAnimation();
         Vector3 kickDirection = (shotDirection + Vector3.up * 0.12f).normalized;
         ball.linearVelocity = new Vector3(0f, ball.linearVelocity.y, 0f);
         ball.AddForce(kickDirection * powerShotForce, ForceMode.Impulse);
+        nextPowerShotTime = Time.time + powerShotCooldown;
+        SoccerMatchManager.Instance?.RegisterBallTouch(true);
         lastTouchedBall = ball;
         lastBallTouchTime = Time.time;
     }
@@ -433,10 +468,42 @@ public class PlayerController : MonoBehaviour
 
             Vector3 pushDirection = (moveDir + Vector3.up * 0.06f).normalized;
             ball.AddForce(pushDirection * footTouchKickForce, ForceMode.Impulse);
+            SoccerMatchManager.Instance?.RegisterBallTouch(true);
             lastTouchedBall = ball;
             lastBallTouchTime = Time.time;
             return;
         }
+    }
+
+    private void TryChallengeOpponentBall(Vector3 moveDir)
+    {
+        SoccerMatchManager manager = SoccerMatchManager.Instance;
+        if (manager == null || !manager.OpponentHasPossession || moveDir.sqrMagnitude < 0.01f || currentSpeed < 1f || Time.time < nextChallengeTime)
+            return;
+
+        Rigidbody ball = manager.MatchBall;
+        if (ball == null) return;
+
+        Vector3 toBall = Vector3.ProjectOnPlane(ball.position - transform.position, Vector3.up);
+        float distance = toBall.magnitude;
+        if (distance > challengeRange || distance < 0.05f)
+            return;
+
+        // This remains directional: running at the ball lets a player tackle;
+        // merely standing beside the AI cannot steal it automatically.
+        if (Vector3.Dot(moveDir, toBall / distance) < 0.25f)
+            return;
+
+        // The player always attacks toward the north goal. When stealing from
+        // behind an AI, use that target direction for the first touch instead
+        // of kicking the ball farther along the AI's run direction.
+        Vector3 playerAttackDirection = Vector3.forward;
+        Vector3 clearDirection = (playerAttackDirection * 0.9f + moveDir * 0.2f + Vector3.up * 0.05f).normalized;
+        ball.AddForce(clearDirection * challengeKickForce, ForceMode.Impulse);
+        manager.RegisterBallTouch(true);
+        lastTouchedBall = ball;
+        lastBallTouchTime = Time.time;
+        nextChallengeTime = Time.time + challengeCooldown;
     }
 
     private void PlayPowerShotAnimation()

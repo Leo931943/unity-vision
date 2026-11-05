@@ -19,6 +19,13 @@ public class SoccerGoalDetector : MonoBehaviour
             Rigidbody rb = other.attachedRigidbody;
             if (rb != null)
             {
+                if (SoccerMatchManager.Instance != null)
+                {
+                    isScored = true;
+                    SoccerMatchManager.Instance.RegisterGoal(this);
+                    StartCoroutine(AllowNextGoal());
+                    return;
+                }
                 isScored = true;
                 PlaygroundHUD hud = FindFirstObjectByType<PlaygroundHUD>();
                 if (hud != null)
@@ -28,6 +35,12 @@ public class SoccerGoalDetector : MonoBehaviour
                 StartCoroutine(ResetBallRoutine(rb));
             }
         }
+    }
+
+    private IEnumerator AllowNextGoal()
+    {
+        yield return new WaitForSeconds(3f);
+        isScored = false;
     }
 
     private IEnumerator ResetBallRoutine(Rigidbody ballRb)
