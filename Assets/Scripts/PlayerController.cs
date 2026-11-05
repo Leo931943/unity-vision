@@ -34,6 +34,21 @@ public class PlayerController : MonoBehaviour
     [Min(0f)] public float kickForce = 1.4f;
     [Tooltip("Minimum delay between touches of the same ball")]
     [Min(0.01f)] public float ballTouchCooldown = 0.12f;
+    [Tooltip("How far from the player a ball can be controlled or kicked")]
+    [Min(0.1f)] public float ballControlRange = 1.35f;
+    [Tooltip("Impulse used for an E-key power shot")]
+    [Min(0f)] public float powerShotForce = 7.5f;
+    [Header("Foot Ball Contact")]
+    [Tooltip("Size of the invisible physical touch zone in front of the feet")]
+    public Vector3 footTouchZoneSize = new Vector3(1.12f, 0.4f, 0.82f);
+    [Tooltip("Local position of the invisible physical touch zone")]
+    public Vector3 footTouchZoneOffset = new Vector3(0f, 0.28f, 0.34f);
+    [Tooltip("Extra impulse from the foot touch zone when moving quickly")]
+    [Min(0f)] public float footTouchKickForce = 0.9f;
+    [Tooltip("Minimum delay between repeated touches from the invisible foot zone")]
+    [Min(0.01f)] public float footTouchCooldown = 0.055f;
+    [Header("Power Shot Animation")]
+    [Min(0.1f)] public float powerShotAnimationDuration = 0.58f;
 
     [Header("References")]
     public Transform cameraTransform;
@@ -49,6 +64,13 @@ public class PlayerController : MonoBehaviour
     private bool isJumping;
     private Rigidbody lastTouchedBall;
     private float lastBallTouchTime;
+    private float powerShotAnimationTime = -1f;
+    private Transform rightUpperLeg;
+    private Transform rightLowerLeg;
+    private Transform rightFoot;
+    private Quaternion rightUpperLegBaseRotation;
+    private Quaternion rightLowerLegBaseRotation;
+    private Quaternion rightFootBaseRotation;
 
     // Status properties for HUD
     public float CurrentSpeed => currentSpeed;
@@ -86,11 +108,13 @@ public class PlayerController : MonoBehaviour
 
         if (cameraTransform == null && Camera.main != null)
             cameraTransform = Camera.main.transform;
+
+        CreateFootTouchZone();
     }
 
     void Update()
     {
-        ReadInput(out Vector2 moveInput, out bool sprintInput, out bool jumpInput, out bool resetInput);
+        ReadInput(out Vector2 moveInput, out bool sprintInput, out bool jumpInput, out bool resetInput, out bool powerShotInput);
 
         if (resetInput)
         {
@@ -149,9 +173,17 @@ public class PlayerController : MonoBehaviour
         // Apply gravity
         verticalVelocity += gravity * Time.deltaTime;
 
+        // Sweep the invisible foot contact volume before the controller moves.
+        // A CharacterController can otherwise cross a small ball between frames
+        // at sprint speed without reporting a collision.
+        SweepFootTouchZone(moveDir);
+
         // Final motion
         Vector3 velocity = moveDir * currentSpeed + Vector3.up * verticalVelocity;
         controller.Move(velocity * Time.deltaTime);
+
+        if (powerShotInput)
+            TryPowerShot(moveDir);
 
         // Update Animator parameters if present
         UpdateAnimator();
@@ -185,12 +217,49 @@ public class PlayerController : MonoBehaviour
         animator.SetFloat("MotionSpeed", motionSpeed);
     }
 
-    private void ReadInput(out Vector2 moveInput, out bool sprint, out bool jump, out bool reset)
+    private void LateUpdate()
+    {
+        if (powerShotAnimationTime < 0f)
+            return;
+
+        powerShotAnimationTime += Time.deltaTime;
+        float t = Mathf.Clamp01(powerShotAnimationTime / powerShotAnimationDuration);
+        if (t >= 1f)
+        {
+            RestorePowerShotPose();
+            powerShotAnimationTime = -1f;
+            return;
+        }
+
+        // Wind the kicking leg back, strike through, then recover. Applying this
+        // after Animator evaluation keeps the current body pose and never moves
+        // the hips/root below the ground.
+        float upperLegAngle = t < 0.26f
+            ? Mathf.Lerp(0f, 24f, t / 0.26f)
+            : t < 0.58f
+                ? Mathf.Lerp(24f, -58f, (t - 0.26f) / 0.32f)
+                : Mathf.Lerp(-58f, 0f, (t - 0.58f) / 0.42f);
+        float lowerLegAngle = t < 0.30f
+            ? Mathf.Lerp(0f, 14f, t / 0.30f)
+            : t < 0.58f
+                ? Mathf.Lerp(14f, -42f, (t - 0.30f) / 0.28f)
+                : Mathf.Lerp(-42f, 0f, (t - 0.58f) / 0.42f);
+
+        if (rightUpperLeg != null)
+            rightUpperLeg.localRotation = rightUpperLegBaseRotation * Quaternion.AngleAxis(upperLegAngle, Vector3.right);
+        if (rightLowerLeg != null)
+            rightLowerLeg.localRotation = rightLowerLegBaseRotation * Quaternion.AngleAxis(lowerLegAngle, Vector3.right);
+        if (rightFoot != null)
+            rightFoot.localRotation = rightFootBaseRotation * Quaternion.AngleAxis(-upperLegAngle * 0.35f, Vector3.right);
+    }
+
+    private void ReadInput(out Vector2 moveInput, out bool sprint, out bool jump, out bool reset, out bool powerShot)
     {
         moveInput = Vector2.zero;
         sprint = false;
         jump = false;
         reset = false;
+        powerShot = false;
 
 #if ENABLE_INPUT_SYSTEM
         var kb = Keyboard.current;
@@ -205,12 +274,14 @@ public class PlayerController : MonoBehaviour
             moveInput = new Vector2(x, y);
 
             sprint = kb.leftShiftKey.isPressed || kb.rightShiftKey.isPressed;
+            powerShot = kb.eKey.wasPressedThisFrame;
             jump = kb.spaceKey.wasPressedThisFrame;
             reset = kb.rKey.wasPressedThisFrame;
         }
 #else
         moveInput = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
         sprint = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+        powerShot = Input.GetKeyDown(KeyCode.E);
         jump = Input.GetKeyDown(KeyCode.Space);
         reset = Input.GetKeyDown(KeyCode.R);
 #endif
@@ -257,5 +328,138 @@ public class PlayerController : MonoBehaviour
 
         lastTouchedBall = rb;
         lastBallTouchTime = Time.time;
+    }
+
+    private void TryPowerShot(Vector3 moveDir)
+    {
+        // A shot is also a player action when no ball is in range.
+        PlayPowerShotAnimation();
+
+        Vector3 shotDirection = moveDir.sqrMagnitude > 0.01f ? moveDir : transform.forward;
+        Rigidbody ball = FindControllableBall(shotDirection, ballControlRange + 0.3f);
+        if (ball == null)
+            return;
+
+        Vector3 kickDirection = (shotDirection + Vector3.up * 0.12f).normalized;
+        ball.linearVelocity = new Vector3(0f, ball.linearVelocity.y, 0f);
+        ball.AddForce(kickDirection * powerShotForce, ForceMode.Impulse);
+        lastTouchedBall = ball;
+        lastBallTouchTime = Time.time;
+    }
+
+    private Rigidbody FindControllableBall(Vector3 preferredDirection, float range)
+    {
+        Collider[] nearby = Physics.OverlapSphere(transform.position + Vector3.up * 0.25f, range, ~0, QueryTriggerInteraction.Ignore);
+        Rigidbody bestBall = null;
+        float bestScore = float.MaxValue;
+
+        foreach (Collider candidate in nearby)
+        {
+            if (!candidate.CompareTag("SoccerBall"))
+                continue;
+
+            Rigidbody ball = candidate.attachedRigidbody;
+            if (ball == null || ball.isKinematic)
+                continue;
+
+            Vector3 toBall = ball.position - transform.position;
+            Vector3 flatToBall = Vector3.ProjectOnPlane(toBall, Vector3.up);
+            if (flatToBall.sqrMagnitude < 0.001f)
+                continue;
+
+            // Prefer balls in the direction of travel, while allowing a generous
+            // side/rear reach so a slightly missed touch still feels responsive.
+            float directionPenalty = 1f - Mathf.Clamp01(Vector3.Dot(preferredDirection.normalized, flatToBall.normalized));
+            float score = flatToBall.sqrMagnitude + directionPenalty * 0.4f;
+            if (score < bestScore)
+            {
+                bestScore = score;
+                bestBall = ball;
+            }
+        }
+
+        return bestBall;
+    }
+
+    private void CreateFootTouchZone()
+    {
+        const string zoneName = "FootBallTouchZone";
+        Transform existingZone = transform.Find(zoneName);
+        GameObject zone = existingZone != null ? existingZone.gameObject : new GameObject(zoneName);
+        zone.transform.SetParent(transform, false);
+        zone.transform.localPosition = footTouchZoneOffset;
+        zone.transform.localRotation = Quaternion.identity;
+
+        BoxCollider box = zone.GetComponent<BoxCollider>();
+        if (box == null)
+            box = zone.AddComponent<BoxCollider>();
+
+        // This is deliberately a solid collider rather than a trigger or a
+        // force-based helper. It gives the foot a larger contact surface, while
+        // the ball stays a fully independent Rigidbody and can be lost on turns.
+        box.isTrigger = false;
+        box.size = footTouchZoneSize;
+        Physics.IgnoreCollision(box, controller, true);
+    }
+
+    private void SweepFootTouchZone(Vector3 moveDir)
+    {
+        if (moveDir.sqrMagnitude < 0.001f || currentSpeed < 0.2f)
+            return;
+
+        if (Time.time < lastBallTouchTime + footTouchCooldown)
+            return;
+
+        Vector3 center = transform.TransformPoint(footTouchZoneOffset);
+        Vector3 halfExtents = footTouchZoneSize * 0.5f;
+        float sweepDistance = currentSpeed * Time.deltaTime + 0.22f;
+        RaycastHit[] hits = Physics.BoxCastAll(
+            center,
+            halfExtents,
+            moveDir,
+            transform.rotation,
+            sweepDistance,
+            ~0,
+            QueryTriggerInteraction.Ignore);
+
+        foreach (RaycastHit hit in hits)
+        {
+            if (!hit.collider.CompareTag("SoccerBall"))
+                continue;
+
+            Rigidbody ball = hit.collider.attachedRigidbody;
+            if (ball == null || ball.isKinematic)
+                continue;
+
+            Vector3 pushDirection = (moveDir + Vector3.up * 0.06f).normalized;
+            ball.AddForce(pushDirection * footTouchKickForce, ForceMode.Impulse);
+            lastTouchedBall = ball;
+            lastBallTouchTime = Time.time;
+            return;
+        }
+    }
+
+    private void PlayPowerShotAnimation()
+    {
+        if (animator == null || !animator.isHuman)
+            return;
+
+        rightUpperLeg = animator.GetBoneTransform(HumanBodyBones.RightUpperLeg);
+        rightLowerLeg = animator.GetBoneTransform(HumanBodyBones.RightLowerLeg);
+        rightFoot = animator.GetBoneTransform(HumanBodyBones.RightFoot);
+        if (rightUpperLeg == null || rightLowerLeg == null || rightFoot == null)
+            return;
+
+        rightUpperLegBaseRotation = rightUpperLeg.localRotation;
+        rightLowerLegBaseRotation = rightLowerLeg.localRotation;
+        rightFootBaseRotation = rightFoot.localRotation;
+        powerShotAnimationTime = 0f;
+    }
+
+    private void RestorePowerShotPose()
+    {
+        if (rightUpperLeg != null) rightUpperLeg.localRotation = rightUpperLegBaseRotation;
+        if (rightLowerLeg != null) rightLowerLeg.localRotation = rightLowerLegBaseRotation;
+        if (rightFoot != null) rightFoot.localRotation = rightFootBaseRotation;
     }
 }

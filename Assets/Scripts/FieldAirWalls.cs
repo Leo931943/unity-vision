@@ -8,6 +8,7 @@ public static class FieldAirWalls
 {
     private const float Thickness = 0.6f;
     private const float Height = 6.5f;
+    private static PhysicsMaterial airWallPhysicsMaterial;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void CreateForPlaygroundScene()
@@ -21,6 +22,7 @@ public static class FieldAirWalls
         DisableGoalNetColliders();
         ApplyBluePuGoalAprons();
         RemoveLegacyGoalApronStrips();
+        ApplyAirWallPhysics();
 
         if (GameObject.Find("FieldAirWalls_Invisible") != null)
             return;
@@ -119,5 +121,32 @@ public static class FieldAirWalls
         BoxCollider collider = wall.AddComponent<BoxCollider>();
         collider.center = new Vector3(0f, size.y * 0.5f, 0f);
         collider.size = size;
+        collider.sharedMaterial = GetAirWallPhysicsMaterial();
+    }
+
+    private static void ApplyAirWallPhysics()
+    {
+        GameObject walls = GameObject.Find("FieldAirWalls_Invisible");
+        if (walls == null)
+            return;
+
+        foreach (BoxCollider wall in walls.GetComponentsInChildren<BoxCollider>())
+            wall.sharedMaterial = GetAirWallPhysicsMaterial();
+    }
+
+    private static PhysicsMaterial GetAirWallPhysicsMaterial()
+    {
+        if (airWallPhysicsMaterial != null)
+            return airWallPhysicsMaterial;
+
+        airWallPhysicsMaterial = new PhysicsMaterial("Runtime_AirWallBounce")
+        {
+            bounciness = 0.86f,
+            dynamicFriction = 0.05f,
+            staticFriction = 0.05f,
+            bounceCombine = PhysicsMaterialCombine.Maximum,
+            frictionCombine = PhysicsMaterialCombine.Minimum
+        };
+        return airWallPhysicsMaterial;
     }
 }

@@ -124,11 +124,11 @@ public static class PlaygroundBuilder
     private static void CreatePhysicsMaterials()
     {
         soccerBallPhysMat = new PhysicsMaterial("SoccerBallPhysicsMaterial");
-        soccerBallPhysMat.bounciness = 0.28f;
-        soccerBallPhysMat.dynamicFriction = 0.65f;
-        soccerBallPhysMat.staticFriction = 0.65f;
-        soccerBallPhysMat.bounceCombine = PhysicsMaterialCombine.Average;
-        soccerBallPhysMat.frictionCombine = PhysicsMaterialCombine.Average;
+        soccerBallPhysMat.bounciness = 0.58f;
+        soccerBallPhysMat.dynamicFriction = 0.35f;
+        soccerBallPhysMat.staticFriction = 0.35f;
+        soccerBallPhysMat.bounceCombine = PhysicsMaterialCombine.Maximum;
+        soccerBallPhysMat.frictionCombine = PhysicsMaterialCombine.Minimum;
         AssetDatabase.CreateAsset(soccerBallPhysMat, "Assets/Materials/SoccerBallPhysicsMaterial.physicMaterial");
     }
 

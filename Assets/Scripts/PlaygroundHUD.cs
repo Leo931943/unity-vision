@@ -131,11 +131,11 @@ public class PlaygroundHUD : MonoBehaviour
         GUILayout.Label("🎮 操作指南 (Controls)", headerStyle);
         GUILayout.Space(4);
         GUILayout.Label("• [W][A][S][D] - 自由走動 / 探索操場", helpStyle);
-        GUILayout.Label("• [Left Shift] - 按住衝刺高速奔跑", helpStyle);
+        GUILayout.Label("• [Shift] - 按住衝刺 / [E] - 靠近足球時抽射", helpStyle);
         GUILayout.Label("• [Space 空白鍵] - 起跳騰空 (Jump)", helpStyle);
         GUILayout.Label("• [滑鼠移動] - 360° 旋轉視角 / [滾輪] 視角遠近縮放", helpStyle);
         GUILayout.Label("• [R 鍵] - 角色重設回中央 / [ESC] 釋放滑鼠指標", helpStyle);
-        GUILayout.Label("• 提示: 走向足球即可進行踢球與帶球！", helpStyle);
+        GUILayout.Label("• 提示: 實體碰球可帶球；急轉彎會依慣性掉球！", helpStyle);
         GUILayout.EndArea();
 
         // 3. Goal Notification Banner
