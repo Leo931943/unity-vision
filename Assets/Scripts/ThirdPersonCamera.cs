@@ -13,7 +13,7 @@ public class ThirdPersonCamera : MonoBehaviour
     public float defaultDistance = 5.0f;
     public float minDistance = 2.0f;
     public float maxDistance = 14.0f;
-    public float zoomSpeed = 2.5f;
+    public float zoomSpeed = 15f;
 
     [Header("Sensitivity & Smoothing")]
     public float mouseSensitivity = 2.0f;
@@ -102,7 +102,10 @@ public class ThirdPersonCamera : MonoBehaviour
             Vector2 delta = mouse.delta.ReadValue();
             mouseX = delta.x * 0.1f;
             mouseY = delta.y * 0.1f;
-            scroll = mouse.scroll.ReadValue().y * 0.01f;
+            // Input System reports very small values on some touchpads and
+            // mice.  Boost this before applying zoomSpeed so one wheel step
+            // produces a clearly visible camera-distance change.
+            scroll = mouse.scroll.ReadValue().y * 0.25f;
         }
 #else
         mouseX = Input.GetAxis("Mouse X");

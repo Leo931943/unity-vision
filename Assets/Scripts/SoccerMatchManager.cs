@@ -13,6 +13,7 @@ public class SoccerMatchManager : MonoBehaviour
     public int maxRounds = 3;
     public int winsNeeded = 2;
     public bool RoundActive { get; private set; }
+    public bool IsPracticeMode => matchFinished;
     public Rigidbody MatchBall { get; private set; }
     public string StatusText { get; private set; }
     public float AiPowerShotCooldownRemaining => opponent != null ? opponent.PowerShotCooldownRemaining : 0f;
@@ -36,6 +37,10 @@ public class SoccerMatchManager : MonoBehaviour
     private float roundStartedAt = -999f;
     private string countdownText = "";
     private GUIStyle countdownStyle;
+    private GUIStyle matchHudStyle;
+    private GUIStyle teamScoreStyle;
+    private Texture2D playerScoreBackground;
+    private Texture2D opponentScoreBackground;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void CreateIfNeeded()
@@ -50,6 +55,7 @@ public class SoccerMatchManager : MonoBehaviour
     private void Awake()
     {
         Instance = this;
+        DisableRetiredPhotoBackdrops();
         player = FindFirstObjectByType<PlayerController>();
         GameObject opponentObject = GameObject.Find("Opponent_FreeRun");
         if (opponentObject != null)
@@ -61,6 +67,26 @@ public class SoccerMatchManager : MonoBehaviour
 
         MatchBall = FindCentralBall();
         DisableExtraBalls();
+    }
+
+    // The stadium is now one continuous panorama.  Older scene saves may
+    // still contain these independent image quads; hide them at runtime so a
+    // legacy white rectangle can never cover the goal again.
+    private static void DisableRetiredPhotoBackdrops()
+    {
+        string[] retiredBackdrops =
+        {
+            "AttackingGoalPhotoBackdrop",
+            "CommandStandPhotoBackdrop",
+            "RoundedPhotoBackdrop_NE"
+        };
+
+        foreach (string backdropName in retiredBackdrops)
+        {
+            GameObject backdrop = GameObject.Find(backdropName);
+            if (backdrop != null)
+                backdrop.SetActive(false);
+        }
     }
 
     private void Start()
@@ -115,6 +141,8 @@ public class SoccerMatchManager : MonoBehaviour
         opponent.SetWaitingForKickoff(true);
         player.enabled = false;
         StatusText = $"第 {roundNumber}/{maxRounds} 局準備開球";
+        if (roundNumber == 1)
+            MatchAudioDirector.PlayOpeningSequence();
 
         for (int count = 3; count >= 1; count--)
         {
@@ -144,7 +172,13 @@ public class SoccerMatchManager : MonoBehaviour
         if (playerWins >= winsNeeded || opponentWins >= winsNeeded || roundNumber >= maxRounds)
         {
             string matchWinner = playerWins == opponentWins ? "比賽平手！" : playerWins > opponentWins ? "玩家贏得比賽！" : "AI 贏得比賽！";
-            EnterPracticeMode($"{matchWinner} 最終比分 {playerWins}:{opponentWins}");
+            bool playerWonMatch = playerWins > opponentWins;
+            bool playerLostMatch = opponentWins > playerWins;
+            if (playerWonMatch)
+                MatchAudioDirector.PlayVictory();
+            else if (playerLostMatch)
+                MatchAudioDirector.PlayDefeat();
+            EnterPracticeMode($"{matchWinner} 最終比分 {playerWins}:{opponentWins}", playerWonMatch || playerLostMatch);
             return;
         }
 
@@ -169,8 +203,10 @@ public class SoccerMatchManager : MonoBehaviour
         lastTouchTime = -999f;
     }
 
-    private void EnterPracticeMode(string result)
+    private void EnterPracticeMode(string result, bool keepMatchEndMusic = false)
     {
+        if (!keepMatchEndMusic)
+            MatchAudioDirector.StopAll();
         matchFinished = true;
         RoundActive = false;
         player.enabled = true;
@@ -182,6 +218,7 @@ public class SoccerMatchManager : MonoBehaviour
 
     private void RestartMatch()
     {
+        MatchAudioDirector.PrepareForNewMatch();
         matchFinished = false;
         playerWins = 0;
         opponentWins = 0;
@@ -230,7 +267,6 @@ public class SoccerMatchManager : MonoBehaviour
 
     private void OnGUI()
     {
-        if (string.IsNullOrEmpty(countdownText)) return;
         if (countdownStyle == null)
         {
             countdownStyle = new GUIStyle(GUI.skin.label)
@@ -241,6 +277,74 @@ public class SoccerMatchManager : MonoBehaviour
                 normal = { textColor = Color.white }
             };
         }
-        GUI.Label(new Rect(0f, Screen.height * 0.28f, Screen.width, 120f), countdownText, countdownStyle);
+
+        if (matchHudStyle == null)
+        {
+            matchHudStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 24,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.UpperCenter,
+                normal = { textColor = Color.white }
+            };
+        }
+
+        if (teamScoreStyle == null)
+        {
+            teamScoreStyle = new GUIStyle(GUI.skin.label)
+            {
+                fontSize = 20,
+                fontStyle = FontStyle.Bold,
+                alignment = TextAnchor.MiddleCenter,
+                normal = { textColor = Color.white }
+            };
+            playerScoreBackground = MakeColorTexture(new Color(0.8f, 0.1f, 0.12f, 0.92f));
+            opponentScoreBackground = MakeColorTexture(new Color(0.08f, 0.28f, 0.8f, 0.92f));
+        }
+
+        if (!matchFinished && roundNumber > 0)
+        {
+            string clock = RoundActive
+                ? $"倒數 {FormatClock(timeRemaining)}"
+                : string.IsNullOrEmpty(countdownText) ? "準備下一局" : $"開球倒數 {countdownText}";
+            float cardWidth = 190f;
+            float gap = 12f;
+            float leftX = Screen.width * 0.5f - cardWidth - gap * 0.5f;
+            DrawTeamScore(new Rect(leftX, 14f, cardWidth, 58f), "玩家", playerWins, playerScoreBackground);
+            DrawTeamScore(new Rect(leftX + cardWidth + gap, 14f, cardWidth, 58f), "劉銘傳", opponentWins, opponentScoreBackground);
+            DrawTopCenterLabel(new Rect(0f, 76f, Screen.width, 30f), clock, matchHudStyle);
+        }
+
+        if (!string.IsNullOrEmpty(countdownText))
+            GUI.Label(new Rect(0f, Screen.height * 0.28f, Screen.width, 120f), countdownText, countdownStyle);
+    }
+
+    private static void DrawTopCenterLabel(Rect rect, string text, GUIStyle style)
+    {
+        Color originalColor = style.normal.textColor;
+        style.normal.textColor = new Color(0f, 0f, 0f, 0.8f);
+        GUI.Label(new Rect(rect.x + 2f, rect.y + 2f, rect.width, rect.height), text, style);
+        style.normal.textColor = originalColor;
+        GUI.Label(rect, text, style);
+    }
+
+    private void DrawTeamScore(Rect rect, string name, int score, Texture2D background)
+    {
+        GUI.DrawTexture(rect, background);
+        GUI.Label(rect, $"{name}　{score}", teamScoreStyle);
+    }
+
+    private static Texture2D MakeColorTexture(Color color)
+    {
+        Texture2D texture = new Texture2D(1, 1);
+        texture.SetPixel(0, 0, color);
+        texture.Apply();
+        return texture;
+    }
+
+    private static string FormatClock(float secondsRemaining)
+    {
+        int totalSeconds = Mathf.CeilToInt(Mathf.Max(0f, secondsRemaining));
+        return $"{totalSeconds / 60:00}:{totalSeconds % 60:00}";
     }
 }

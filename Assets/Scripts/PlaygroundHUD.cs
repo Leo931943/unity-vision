@@ -1,197 +1,115 @@
 using UnityEngine;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
+/// <summary>Frameless prompts and an optional H-key help guide.</summary>
 public class PlaygroundHUD : MonoBehaviour
 {
     public PlayerController player;
 
-    private float goalTimer = 0f;
+    private float goalTimer;
     private string lastGoalText = "";
-    private int goalCount = 0;
+    private int goalCount;
+    private bool showHelp;
 
-    private GUIStyle headerStyle;
-    private GUIStyle labelStyle;
-    private GUIStyle badgeStyle;
+    private GUIStyle promptStyle;
+    private GUIStyle shortcutStyle;
     private GUIStyle helpStyle;
-    private GUIStyle goalBannerStyle;
-    private Texture2D panelBackground;
-    private Texture2D badgeBackground;
-    private Texture2D goalBannerBackground;
+    private GUIStyle goalStyle;
 
-    void Start()
+    private void Start()
     {
-        if (player == null)
-            player = FindFirstObjectByType<PlayerController>();
-
+        if (player == null) player = FindFirstObjectByType<PlayerController>();
         InitStyles();
     }
 
-    void Update()
+    private void Update()
     {
-        if (goalTimer > 0)
-        {
-            goalTimer -= Time.deltaTime;
-        }
+        if (goalTimer > 0f) goalTimer -= Time.deltaTime;
+        if (WasHelpPressed()) showHelp = !showHelp;
     }
 
     public void ShowGoalNotification(string goalName)
     {
         goalCount++;
-        lastGoalText = $"⚽ GOAL！進球得分！ ({goalName}) ⚽\n累計進球: {goalCount}";
+        lastGoalText = $"⚽ GOAL！進球得分！ ({goalName})  累計進球: {goalCount}";
         goalTimer = 3.5f;
     }
 
     private void InitStyles()
     {
-        panelBackground = MakeColorTexture(new Color(0.08f, 0.1f, 0.14f, 0.85f));
-        badgeBackground = MakeColorTexture(new Color(0.15f, 0.55f, 0.35f, 0.9f));
-        goalBannerBackground = MakeColorTexture(new Color(0.85f, 0.2f, 0.15f, 0.95f));
-
-        headerStyle = new GUIStyle();
-        headerStyle.fontSize = 18;
-        headerStyle.fontStyle = FontStyle.Bold;
-        headerStyle.normal.textColor = Color.white;
-
-        labelStyle = new GUIStyle();
-        labelStyle.fontSize = 14;
-        labelStyle.normal.textColor = new Color(0.9f, 0.9f, 0.95f);
-
-        badgeStyle = new GUIStyle();
-        badgeStyle.fontSize = 13;
-        badgeStyle.fontStyle = FontStyle.Bold;
-        badgeStyle.alignment = TextAnchor.MiddleCenter;
-        badgeStyle.normal.textColor = Color.white;
-        badgeStyle.normal.background = badgeBackground;
-
-        helpStyle = new GUIStyle();
-        helpStyle.fontSize = 12;
-        helpStyle.normal.textColor = new Color(0.75f, 0.85f, 0.95f);
-
-        goalBannerStyle = new GUIStyle();
-        goalBannerStyle.fontSize = 26;
-        goalBannerStyle.fontStyle = FontStyle.Bold;
-        goalBannerStyle.alignment = TextAnchor.MiddleCenter;
-        goalBannerStyle.normal.textColor = Color.yellow;
-        goalBannerStyle.normal.background = goalBannerBackground;
+        promptStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 24, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter,
+            normal = { textColor = Color.white }
+        };
+        shortcutStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 16, fontStyle = FontStyle.Bold, alignment = TextAnchor.LowerLeft,
+            normal = { textColor = new Color(0.92f, 0.96f, 1f) }
+        };
+        helpStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 15, alignment = TextAnchor.UpperLeft, normal = { textColor = Color.white }
+        };
+        goalStyle = new GUIStyle(promptStyle)
+        {
+            fontSize = 25, normal = { textColor = Color.yellow }
+        };
     }
 
-    private Texture2D MakeColorTexture(Color col)
+    private void OnGUI()
     {
-        Texture2D tex = new Texture2D(1, 1);
-        tex.SetPixel(0, 0, col);
-        tex.Apply();
-        return tex;
+        if (promptStyle == null) InitStyles();
+
+        SoccerMatchManager match = SoccerMatchManager.Instance;
+        bool isFreeMode = match == null || match.IsPracticeMode;
+        if (isFreeMode)
+            DrawShadowedLabel(new Rect(0f, 14f, Screen.width, 42f),
+                "自由練習模式　按一下 Enter 跟劉銘傳單挑", promptStyle);
+
+        string playerCooldown = $"抽射冷卻　玩家：{FormatCooldown(player != null ? player.PowerShotCooldownRemaining : 0f)}";
+        DrawShadowedLabel(new Rect(22f, Screen.height - 78f, 460f, 28f), playerCooldown, shortcutStyle);
+        if (match != null && !match.IsPracticeMode)
+            DrawShadowedLabel(new Rect(22f, Screen.height - 106f, 460f, 28f),
+                $"劉銘傳：{FormatCooldown(match.AiPowerShotCooldownRemaining)}", shortcutStyle);
+
+        DrawShadowedLabel(new Rect(22f, Screen.height - 46f, 420f, 28f),
+            showHelp ? "按下 H 隱藏操作指南" : "按下 H 顯示操作指南", shortcutStyle);
+
+        if (showHelp)
+        {
+            const string guide = "操作指南\n" +
+                                 "W / A / S / D：移動\n" +
+                                 "Shift：衝刺　　Space：跳躍\n" +
+                                 "E：靠近足球時抽射\n" +
+                                 "滑鼠：旋轉視角　滾輪：縮放\n" +
+                                 "R：回到中央　Esc：釋放滑鼠";
+            DrawShadowedLabel(new Rect(22f, Screen.height - 235f, 430f, 155f), guide, helpStyle);
+        }
+
+        if (goalTimer > 0f)
+            DrawShadowedLabel(new Rect(0f, Screen.height * 0.38f, Screen.width, 42f), lastGoalText, goalStyle);
     }
 
-    void OnGUI()
+    private static void DrawShadowedLabel(Rect rect, string text, GUIStyle style)
     {
-        if (panelBackground == null)
-            InitStyles();
-
-        // 1. Top Left Panel: Scene Title and Player Status
-        float panelW = 340;
-        float panelH = 160;
-        Rect panelRect = new Rect(20, 20, panelW, panelH);
-        GUI.DrawTexture(panelRect, panelBackground);
-
-        GUILayout.BeginArea(new Rect(panelRect.x + 15, panelRect.y + 12, panelW - 30, panelH - 24));
-        GUILayout.Label("🏫 校園運動場與綠草地足球場", headerStyle);
-        GUILayout.Space(6);
-
-        string currentZone = GetPlayerZone();
-        GUILayout.Label($"📍 所在位置: {currentZone}", labelStyle);
-
-        if (SoccerMatchManager.Instance != null)
-            GUILayout.Label(SoccerMatchManager.Instance.GetHudText(), labelStyle);
-
-        if (player != null)
-        {
-            string stateStr = "靜止 (Idle)";
-            if (!player.IsGrounded)
-            {
-                stateStr = "跳躍滯空中 (Jumping)";
-            }
-            else if (player.IsSprinting)
-            {
-                stateStr = "高速奔跑 (Sprinting)";
-            }
-            else if (player.CurrentSpeed > 0.2f)
-            {
-                stateStr = "漫步走動 (Walking)";
-            }
-
-            GUILayout.Label($"🏃 移動狀態: {stateStr}", labelStyle);
-            GUILayout.Label($"⚡ 移動速度: {player.CurrentSpeed:F1} m/s", labelStyle);
-        }
-        GUILayout.EndArea();
-
-        // 2. Bottom Left Panel: Controls Guide
-        float helpW = 360;
-        float helpH = 145;
-        Rect helpRect = new Rect(20, Screen.height - helpH - 20, helpW, helpH);
-        GUI.DrawTexture(helpRect, panelBackground);
-
-        GUILayout.BeginArea(new Rect(helpRect.x + 15, helpRect.y + 10, helpW - 30, helpH - 20));
-        GUILayout.Label("🎮 操作指南 (Controls)", headerStyle);
-        GUILayout.Space(4);
-        GUILayout.Label("• [W][A][S][D] - 自由走動 / 探索操場", helpStyle);
-        GUILayout.Label("• [Shift] - 按住衝刺 / [E] - 靠近足球時抽射（3秒冷卻）", helpStyle);
-        GUILayout.Label("• [Space 空白鍵] - 起跳騰空 (Jump)", helpStyle);
-        GUILayout.Label("• [滑鼠移動] - 360° 旋轉視角 / [滾輪] 視角遠近縮放", helpStyle);
-        GUILayout.Label("• [R 鍵] - 角色重設回中央 / [ESC] 釋放滑鼠指標", helpStyle);
-        GUILayout.Label("• 比賽結束後 [Enter] - 再玩一次 / 否則可自由練習", helpStyle);
-        GUILayout.Label("• 提示: 實體碰球可帶球；急轉彎會依慣性掉球！", helpStyle);
-        GUILayout.EndArea();
-
-        // 3. Bottom Right Panel: Power-shot cooldowns
-        float cooldownW = 260;
-        float cooldownH = 100;
-        Rect cooldownRect = new Rect(Screen.width - cooldownW - 20, Screen.height - cooldownH - 20, cooldownW, cooldownH);
-        GUI.DrawTexture(cooldownRect, panelBackground);
-        GUILayout.BeginArea(new Rect(cooldownRect.x + 15, cooldownRect.y + 10, cooldownW - 30, cooldownH - 20));
-        GUILayout.Label("⚡ 抽射冷卻", headerStyle);
-        float playerCooldown = player != null ? player.PowerShotCooldownRemaining : 0f;
-        float aiCooldown = SoccerMatchManager.Instance != null ? SoccerMatchManager.Instance.AiPowerShotCooldownRemaining : 0f;
-        GUILayout.Label($"你：{FormatCooldown(playerCooldown)}", helpStyle);
-        GUILayout.Label($"AI：{FormatCooldown(aiCooldown)}", helpStyle);
-        GUILayout.EndArea();
-
-        // 4. Goal Notification Banner
-        if (goalTimer > 0)
-        {
-            float bannerW = 480;
-            float bannerH = 80;
-            Rect bannerRect = new Rect((Screen.width - bannerW) * 0.5f, 40, bannerW, bannerH);
-            GUI.Box(bannerRect, lastGoalText, goalBannerStyle);
-        }
+        Color originalColor = style.normal.textColor;
+        style.normal.textColor = new Color(0f, 0f, 0f, 0.8f);
+        GUI.Label(new Rect(rect.x + 2f, rect.y + 2f, rect.width, rect.height), text, style);
+        style.normal.textColor = originalColor;
+        GUI.Label(rect, text, style);
     }
 
-    private string GetPlayerZone()
+    private static string FormatCooldown(float remaining) => remaining <= 0.05f ? "可使用" : $"{remaining:F1} 秒";
+
+    private static bool WasHelpPressed()
     {
-        if (player == null) return "操場園區";
-        Vector3 pos = player.transform.position;
-
-        // Soccer field: |X| <= 32 and |Z| <= 50
-        if (Mathf.Abs(pos.x) <= 32f && Mathf.Abs(pos.z) <= 50f)
-        {
-            return "⚽ 綠草地足球場 (Soccer Pitch)";
-        }
-        // Track: approx |X| between 32 and 42 or curves
-        float r = Mathf.Sqrt(pos.x * pos.x + Mathf.Pow(Mathf.Max(0, Mathf.Abs(pos.z) - 50f), 2));
-        if (r >= 32f && r <= 42f)
-        {
-            int lane = Mathf.Clamp(Mathf.FloorToInt((r - 32f) / 1.6f) + 1, 1, 6);
-            return $"🏃 400米跑道 (第 {lane} 跑道)";
-        }
-        if (pos.x > 42f && Mathf.Abs(pos.z) <= 45f)
-        {
-            return "🏟️ 主看台觀眾席 (Bleachers)";
-        }
-
-        return "🌲 操場外圍周邊 (Perimeter Area)";
-    }
-
-    private static string FormatCooldown(float remaining)
-    {
-        return remaining <= 0.05f ? "可使用" : $"{remaining:F1} 秒";
+#if ENABLE_INPUT_SYSTEM
+        return Keyboard.current != null && Keyboard.current.hKey.wasPressedThisFrame;
+#else
+        return Input.GetKeyDown(KeyCode.H);
+#endif
     }
 }

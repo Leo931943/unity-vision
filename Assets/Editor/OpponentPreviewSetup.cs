@@ -9,6 +9,33 @@ public static class OpponentPreviewSetup
     private const string OpponentFolder = "Assets/Character/Opponent";
     private const string ControllerPath = OpponentFolder + "/OpponentRun.controller";
     private const string MaterialPath = OpponentFolder + "/OpponentBlueRobed.mat";
+    // Idle.anim is a generated placeholder with no bone curves.  Playing it on
+    // the opponent resets the avatar to its import pose, which places its feet
+    // below the pitch.  The character's authored Walking clip has a grounded,
+    // upright passing pose, so we use that clip frozen as the ready stance.
+    private const string IdleSourceModelPath = "Assets/Character/Meshy_AI_Casual_Studio_Stance_biped/Meshy_AI_Casual_Studio_Stance_biped_Meshy_Merged_Animations.fbx";
+
+    [InitializeOnLoadMethod]
+    private static void EnsureReadyIdleAfterReload()
+    {
+        EditorApplication.delayCall += () =>
+        {
+            if (Application.isPlaying)
+                return;
+
+            string modelPath = AssetDatabase.FindAssets("t:Model", new[] { OpponentFolder })
+                .Select(AssetDatabase.GUIDToAssetPath)
+                .FirstOrDefault(path => path.EndsWith(".fbx"));
+            if (string.IsNullOrEmpty(modelPath))
+                return;
+
+            AnimationClip runClip = AssetDatabase.LoadAllAssetsAtPath(modelPath)
+                .OfType<AnimationClip>()
+                .FirstOrDefault(clip => !clip.name.StartsWith("__preview__"));
+            if (runClip != null)
+                GetOrCreateRunController(runClip);
+        };
+    }
 
     [MenuItem("Tools/Opponent/Add Free-Running Preview")]
     public static void AddFreeRunningPreview()
@@ -84,6 +111,7 @@ public static class OpponentPreviewSetup
 
     private static AnimatorController GetOrCreateRunController(AnimationClip runClip)
     {
+        AnimationClip idleClip = GetGroundedIdleClip();
         AnimatorController controller = AssetDatabase.LoadAssetAtPath<AnimatorController>(ControllerPath);
         if (controller == null)
         {
@@ -100,9 +128,34 @@ public static class OpponentPreviewSetup
             if (state != null) state.motion = runClip;
         }
 
+        AnimatorStateMachine stateMachine = controller.layers[0].stateMachine;
+        AnimatorState idleState = stateMachine.states
+            .Select(child => child.state)
+            .FirstOrDefault(candidate => candidate.name == "Idle");
+        if (idleState == null && idleClip != null)
+            idleState = stateMachine.AddState("Idle");
+        if (idleState != null && idleClip != null)
+        {
+            idleState.motion = idleClip;
+            // Keep the authored neutral walking frame; only the Run state is
+            // advanced when play starts.
+            idleState.speed = 0f;
+            stateMachine.defaultState = idleState;
+        }
+
         EditorUtility.SetDirty(controller);
         AssetDatabase.SaveAssets();
         return controller;
+    }
+
+    private static AnimationClip GetGroundedIdleClip()
+    {
+        return AssetDatabase.LoadAllAssetsAtPath(IdleSourceModelPath)
+            .OfType<AnimationClip>()
+            .FirstOrDefault(clip => clip.name == "Walking")
+            ?? AssetDatabase.LoadAllAssetsAtPath(IdleSourceModelPath)
+                .OfType<AnimationClip>()
+                .FirstOrDefault(clip => clip.name.IndexOf("walk", System.StringComparison.OrdinalIgnoreCase) >= 0);
     }
 
     private static Material GetOrCreateMaterial()

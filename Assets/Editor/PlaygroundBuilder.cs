@@ -160,6 +160,8 @@ public static class PlaygroundBuilder
             matGrassTurf.SetTextureScale("_BaseMap", new Vector2(8, 12));
         }
         matGrassTurf.SetFloat("_Smoothness", 0.15f);
+        // Match the muted, slightly blue-green artificial turf in the campus reference.
+        matGrassTurf.SetColor("_BaseColor", new Color(0.60f, 0.68f, 0.58f));
         AssetDatabase.CreateAsset(matGrassTurf, "Assets/Materials/Mat_GrassTurf.mat");
 
         // Outer Grass
@@ -178,8 +180,9 @@ public static class PlaygroundBuilder
             matTrack.SetTexture("_BaseMap", trackTex);
             matTrack.SetTextureScale("_BaseMap", new Vector2(10, 10));
         }
-        matTrack.SetColor("_BaseColor", new Color(0.85f, 0.28f, 0.22f));
-        matTrack.SetFloat("_Smoothness", 0.3f);
+        // The real track is a worn dark brick-red rubber, not saturated red plastic.
+        matTrack.SetColor("_BaseColor", new Color(0.64f, 0.23f, 0.19f));
+        matTrack.SetFloat("_Smoothness", 0.16f);
         AssetDatabase.CreateAsset(matTrack, "Assets/Materials/Mat_Track.mat");
 
         // Blue polyurethane safety apron behind each goal, using the same PU

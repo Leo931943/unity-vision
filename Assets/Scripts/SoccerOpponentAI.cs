@@ -49,7 +49,7 @@ public class SoccerOpponentAI : MonoBehaviour
         {
             animator.applyRootMotion = false;
             animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
-            animator.Play("Base Layer.Run", 0, Random.value);
+            animator.Play("Base Layer.Idle", 0, 0f);
         }
     }
 
@@ -165,11 +165,12 @@ public class SoccerOpponentAI : MonoBehaviour
         if (animator == null) return;
         if (waiting)
         {
-            animator.Play("Base Layer.Run", 0, 0f);
-            animator.speed = 0f;
+            animator.Play("Base Layer.Idle", 0, 0f);
+            animator.speed = 1f;
         }
         else
         {
+            animator.Play("Base Layer.Run", 0, Random.value);
             animator.speed = 1f;
         }
     }
