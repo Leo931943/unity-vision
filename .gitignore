@@ -36,3 +36,4 @@ Thumbs.db
 
 # Personal CWA Open Data API credential (copy the tracked example file locally).
 /Assets/StreamingAssets/weather-config.json
+/Assets/StreamingAssets/weather-config.json.meta
