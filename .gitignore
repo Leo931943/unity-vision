@@ -33,3 +33,6 @@ Thumbs.db
 
 # Local, disposable conversion utilities
 /.tools/
+
+# Personal CWA Open Data API credential (copy the tracked example file locally).
+/Assets/StreamingAssets/weather-config.json

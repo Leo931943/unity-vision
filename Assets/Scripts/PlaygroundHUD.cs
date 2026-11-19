@@ -17,12 +17,15 @@ public class PlaygroundHUD : MonoBehaviour
     private GUIStyle shortcutStyle;
     private GUIStyle helpStyle;
     private GUIStyle goalStyle;
+    private GUIStyle weatherStyle;
     private ThirdPersonCamera playerCamera;
+    private CwaWeatherService weatherService;
 
     private void Start()
     {
         if (player == null) player = FindFirstObjectByType<PlayerController>();
         playerCamera = FindFirstObjectByType<ThirdPersonCamera>();
+        weatherService = CwaWeatherService.Instance;
     }
 
     private void Update()
@@ -58,11 +61,19 @@ public class PlaygroundHUD : MonoBehaviour
         {
             fontSize = 25, normal = { textColor = Color.yellow }
         };
+        weatherStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 16,
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.UpperRight,
+            normal = { textColor = new Color(0.92f, 0.96f, 1f) }
+        };
     }
 
     private void OnGUI()
     {
         if (promptStyle == null) InitStyles();
+        if (weatherService == null) weatherService = CwaWeatherService.Instance;
 
         SoccerMatchManager match = SoccerMatchManager.Instance;
         bool isFreeMode = match == null || match.IsPracticeMode;
@@ -81,6 +92,8 @@ public class PlaygroundHUD : MonoBehaviour
         string helpPrompt = showHelp ? "H：隱藏操作指南" : "H：顯示操作指南";
         DrawShadowedLabel(new Rect(22f, Screen.height - 46f, 620f, 28f),
             $"{helpPrompt}　　V：切換視角（目前：{viewMode}）", shortcutStyle);
+
+        DrawWeatherPanel();
 
         if (showHelp)
         {
@@ -104,6 +117,20 @@ public class PlaygroundHUD : MonoBehaviour
         GUI.Label(new Rect(rect.x + 2f, rect.y + 2f, rect.width, rect.height), text, style);
         style.normal.textColor = originalColor;
         GUI.Label(rect, text, style);
+    }
+
+    private void DrawWeatherPanel()
+    {
+        if (weatherService == null)
+            return;
+
+        string observation = weatherService.HasWeatherData
+            ? $"{weatherService.WeatherText}　最近測站：{weatherService.ObservationStation}"
+            : weatherService.WeatherText;
+        string text = $"{weatherService.CampusDisplayName}\n" +
+                      $"{weatherService.TaiwanTimeText}　氣溫：{weatherService.TemperatureText}\n" +
+                      observation;
+        DrawShadowedLabel(new Rect(Screen.width - 550f, 14f, 528f, 64f), text, weatherStyle);
     }
 
     private static string FormatCooldown(float remaining) => remaining <= 0.05f ? "可使用" : $"{remaining:F1} 秒";
