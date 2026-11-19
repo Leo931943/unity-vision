@@ -7200,6 +7200,8 @@ MonoBehaviour:
   rotationSmoothTime: 0.05
   minPitch: -25
   maxPitch: 70
+  firstPersonOffset: {x: 0, y: 1.6, z: 0}
+  hideTargetRenderersInFirstPerson: 1
   collisionMask:
     serializedVersion: 2
     m_Bits: 4294967295

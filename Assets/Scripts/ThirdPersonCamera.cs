@@ -21,6 +21,12 @@ public class ThirdPersonCamera : MonoBehaviour
     public float minPitch = -25f;
     public float maxPitch = 70f;
 
+    [Header("First Person")]
+    [Tooltip("Camera position relative to the target while in first-person view")]
+    public Vector3 firstPersonOffset = new Vector3(0f, 1.6f, 0f);
+    [Tooltip("Hide the local character mesh in first-person view to prevent face clipping")]
+    public bool hideTargetRenderersInFirstPerson = true;
+
     [Header("Collision Avoidance")]
     public LayerMask collisionMask = ~0; // Everything by default
     public float collisionRadius = 0.25f;
@@ -34,6 +40,10 @@ public class ThirdPersonCamera : MonoBehaviour
     private Vector3 currentRotation;
     private Vector3 rotationSmoothVelocity;
     private bool cursorLocked = true;
+    private bool isFirstPerson;
+    private Renderer[] targetRenderers;
+
+    public bool IsFirstPerson => isFirstPerson;
 
     void Start()
     {
@@ -45,12 +55,14 @@ public class ThirdPersonCamera : MonoBehaviour
         {
             yaw = target.eulerAngles.y;
             currentRotation = new Vector3(pitch, yaw, 0);
+            targetRenderers = target.GetComponentsInChildren<Renderer>(true);
         }
     }
 
     void Update()
     {
         HandleCursorLockToggle();
+        HandleViewToggle();
         ReadInput(out float mouseX, out float mouseY, out float scroll);
 
         if (cursorLocked)
@@ -59,7 +71,8 @@ public class ThirdPersonCamera : MonoBehaviour
             pitch -= mouseY * mouseSensitivity;
             pitch = Mathf.Clamp(pitch, minPitch, maxPitch);
 
-            targetDistance = Mathf.Clamp(targetDistance - scroll * zoomSpeed, minDistance, maxDistance);
+            if (!isFirstPerson)
+                targetDistance = Mathf.Clamp(targetDistance - scroll * zoomSpeed, minDistance, maxDistance);
         }
     }
 
@@ -71,6 +84,12 @@ public class ThirdPersonCamera : MonoBehaviour
         Vector3 targetRot = new Vector3(pitch, yaw, 0);
         currentRotation = Vector3.SmoothDamp(currentRotation, targetRot, ref rotationSmoothVelocity, rotationSmoothTime);
         Quaternion rotation = Quaternion.Euler(currentRotation.x, currentRotation.y, 0);
+
+        if (isFirstPerson)
+        {
+            transform.SetPositionAndRotation(target.position + firstPersonOffset, rotation);
+            return;
+        }
 
         Vector3 focusPoint = target.position + targetOffset;
         Vector3 desiredCameraPos = focusPoint - (rotation * Vector3.forward * targetDistance);
@@ -137,6 +156,37 @@ public class ThirdPersonCamera : MonoBehaviour
             SetCursorLock(true);
         }
 #endif
+    }
+
+    private void HandleViewToggle()
+    {
+#if ENABLE_INPUT_SYSTEM
+        if (Keyboard.current != null && Keyboard.current.vKey.wasPressedThisFrame)
+#else
+        if (Input.GetKeyDown(KeyCode.V))
+#endif
+        {
+            isFirstPerson = !isFirstPerson;
+            SetTargetRenderersVisible(!isFirstPerson);
+        }
+    }
+
+    private void SetTargetRenderersVisible(bool visible)
+    {
+        if (!hideTargetRenderersInFirstPerson || targetRenderers == null)
+            return;
+
+        foreach (Renderer targetRenderer in targetRenderers)
+        {
+            if (targetRenderer != null)
+                targetRenderer.enabled = visible;
+        }
+    }
+
+    private void OnDisable()
+    {
+        // Returning to a menu or changing scenes should never leave the player invisible.
+        SetTargetRenderersVisible(true);
     }
 
     public void SetCursorLock(bool locked)

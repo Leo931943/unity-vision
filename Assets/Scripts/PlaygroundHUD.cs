@@ -17,11 +17,12 @@ public class PlaygroundHUD : MonoBehaviour
     private GUIStyle shortcutStyle;
     private GUIStyle helpStyle;
     private GUIStyle goalStyle;
+    private ThirdPersonCamera playerCamera;
 
     private void Start()
     {
         if (player == null) player = FindFirstObjectByType<PlayerController>();
-        InitStyles();
+        playerCamera = FindFirstObjectByType<ThirdPersonCamera>();
     }
 
     private void Update()
@@ -75,8 +76,11 @@ public class PlaygroundHUD : MonoBehaviour
             DrawShadowedLabel(new Rect(22f, Screen.height - 106f, 460f, 28f),
                 $"劉銘傳：{FormatCooldown(match.AiPowerShotCooldownRemaining)}", shortcutStyle);
 
-        DrawShadowedLabel(new Rect(22f, Screen.height - 46f, 420f, 28f),
-            showHelp ? "按下 H 隱藏操作指南" : "按下 H 顯示操作指南", shortcutStyle);
+        bool firstPerson = playerCamera != null && playerCamera.IsFirstPerson;
+        string viewMode = firstPerson ? "第一人稱" : "第三人稱";
+        string helpPrompt = showHelp ? "H：隱藏操作指南" : "H：顯示操作指南";
+        DrawShadowedLabel(new Rect(22f, Screen.height - 46f, 620f, 28f),
+            $"{helpPrompt}　　V：切換視角（目前：{viewMode}）", shortcutStyle);
 
         if (showHelp)
         {
@@ -84,9 +88,9 @@ public class PlaygroundHUD : MonoBehaviour
                                  "W / A / S / D：移動\n" +
                                  "Shift：衝刺　　Space：跳躍\n" +
                                  "E：靠近足球時抽射\n" +
-                                 "滑鼠：旋轉視角　滾輪：縮放\n" +
+                                 "滑鼠：旋轉視角　滾輪：縮放　V：第一／第三人稱\n" +
                                  "R：回到中央　Esc：釋放滑鼠";
-            DrawShadowedLabel(new Rect(22f, Screen.height - 235f, 430f, 155f), guide, helpStyle);
+            DrawShadowedLabel(new Rect(22f, Screen.height - 263f, 500f, 183f), guide, helpStyle);
         }
 
         if (goalTimer > 0f)
